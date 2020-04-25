@@ -1,0 +1,297 @@
+---
+title: "Child Birthweight Data Representations"
+author: "Kobbe Harwell"
+date: ""
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r packages, echo = FALSE, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(lattice)
+```
+
+
+
+Data Acquisition
+```{r access}
+site <- "http://www.stat.berkeley.edu/users/statlabs/data/babies.data"
+BABIES <- read.table(file=url(site), header=TRUE)
+summary(BABIES)
+dim(BABIES)[2]
+```
+
+
+Removing subjects if any observations on the subject are "unknown". The variables `bwt`, `gestation`, `parity`, `age`, `height`, `weight`, and `smoke` use values of 999, 999, 9, 99, 99, 999, and 9, respectively, to denote ''unknown.''
+
+```{r}
+BABIES <- BABIES %>% mutate(bwt = ifelse(bwt == 999, NA, bwt))
+BABIES <- BABIES %>% mutate(gestation = ifelse(gestation == 999, NA, gestation))
+BABIES <- BABIES %>% mutate(parity = ifelse(parity == 9, NA, parity))
+BABIES <- BABIES %>% mutate(age = ifelse(age == 99, NA, age))
+BABIES <- BABIES %>% mutate(height = ifelse(height == 99, NA, height))
+BABIES <- BABIES %>% mutate(weight = ifelse(weight == 999, NA, weight))
+BABIES <- BABIES %>% mutate(smoke = ifelse(smoke == 9, NA, smoke))
+
+```
+
+
+
+
+Cleaning Data Set
+
+```{r}
+CLEAN <- na.omit(BABIES)
+dim(CLEAN)
+```
+
+
+
+```{r}
+colNAs<- colSums(is.na(BABIES))
+colNAs
+colNAs <- as.vector(colSums(is.na(BABIES)))
+
+rowNAs <- table(rowSums(is.na(BABIES)))
+rowNAs
+rowNAs <- as.vector(table(rowSums(is.na(BABIES))))
+```
+>**Comment:**
+
+                The missing values are as follows: 
+                gestation: 13
+                age: 2
+                height: 22
+                weight: 36
+                smoke: 10
+                1174 rows have no missing values, 43 rows have 1, 17 rows have 2, and 2 rows have 3 missing values.
+
+
+
+
+Sorting the values in `CLEAN` by `bwt`, `gestation`, and `age`.  Storing the sorted values in a data frame named `byBGA`.
+
+```{r}
+byBGA <- CLEAN %>% arrange(bwt, gestation, age)
+head(byBGA, 6)
+tail(byBGA, 6)
+```
+
+
+
+Creating a new variable for bodyweight by grams.
+```{r}
+
+  CLEAN <- CLEAN %>% mutate(bwt_gr = bwt*28.35)
+```
+
+
+
+Removing 100 observation at random.
+```{r}
+set.seed(41)
+
+remove <-sample(1:dim(CLEAN)[1],50)
+print("Observation to remove:")
+remove
+
+CLEAN <- slice(CLEAN,-remove)
+dim(CLEAN)[1]
+head(CLEAN)
+```
+
+
+
+```{r save}
+write.csv(CLEAN, file="CLEAN.csv", row.names=FALSE)
+```
+
+
+
+
+
+
+Finding the percentage of the women in `CLEAN` that are pregnant with their first child and do not smoke. Also those pregnant not for a first time and smoking.
+
+
+```{r}
+dim(filter(CLEAN, parity==0 & smoke ==0))[1]
+dim(filter(CLEAN, parity==0 & smoke ==0))[1]/dim(CLEAN)[1]*100
+
+
+
+dim(filter(CLEAN, parity==1 & smoke ==1))[1]
+dim(filter(CLEAN, parity==1 & smoke ==1))[1]/dim(CLEAN)[1]*100
+head(CLEAN)
+```
+
+> **Results:** 
+
+                        # of women are pregnant with their first child and do not smoke.
+                        ~45.3%
+                        # of women not pregnant for first time and smoke:
+                        ~10%
+
+
+
+Creating a frequency histogram of the birth weights of babies whose mothers have never smoked and another histogram for the birth weights of babies whose mothers currently smoke.
+
+```{r}
+
+CLEAN <- CLEAN %>% mutate(smoke = factor(smoke, levels = 0:1, labels =c("Non-Smoker", "Smoker")))
+
+   ggplot(data = CLEAN, aes(x =bwt_gr, y= ..density..)) +
+   geom_histogram(fill = "lightblue") +
+   geom_density(color = "orange") +
+   facet_grid(smoke~.) +
+   xlim(800, 5100) +
+   xlab("Weight in Grams")+
+   theme_bw()
+```
+
+
+
+Exploring Distribution
+
+```{r}
+# Using summarise() and group_by() from dplyr
+  CLEAN %>% group_by(smoke) %>% summarize(mean(bwt_gr))
+  CLEAN %>% group_by(smoke) %>% summarize(sd(bwt_gr))
+  CLEAN %>% group_by(smoke) %>% summarize(var(bwt_gr))
+  diff(range(CLEAN$bwt_gr))
+```
+
+
+
+Creating side-by-side boxplots to compare the birth weights (bwt_gr) of babies whose mother's never smoked and those who currently smoke.
+
+```{r}
+  ggplot(data=CLEAN, aes(x=smoke, y=bwt_gr)) +
+  geom_boxplot()+
+  ylab("Weight in Grams")
+
+```
+
+
+
+
+Finding the the median weight difference between babies who are firstborn and those who are not (`parity = 1`)?
+
+```{r}
+   CLEAN %>% group_by(parity) %>% summarize(median(bwt_gr))
+```
+
+> **Results:** The median weight difference between 
+babies who are firstborn and those who are not is 99 grams.
+
+
+
+Creating a graph of the densities for pre-pregnancy `weight` for mothers who have never smoked and for mothers who currently smoke. 
+```{r}
+    ggplot(data = CLEAN, aes(x =weight, color=smoke)) +
+   geom_density(aes(fill = smoke), alpha=0.2) +
+   xlab("Weight in Pounds")+
+   theme_bw()
+```
+
+
+
+Computing the body mass index (`BMI`) for each mother in `CLEAN`. `BMI` is defined as $\text{kg}/\text{m}^2$.
+```{r}
+    CLEANP <- CLEAN %>% mutate(weightKg = weight*0.45359, heightM = height*0.0254, BMI = weightKg/(heightM^2))
+    head(CLEANP)
+```
+
+
+
+Characterizing the distribution of BMI.
+
+```{r}
+   ggplot(data = CLEANP, aes(x =BMI)) +
+   geom_density() +
+    geom_vline(data=CLEANP, aes(xintercept = median(BMI)), linetype="dashed")+
+   xlab("BMI (kg/m^2)")+
+   theme_bw()
+```
+
+**Results:** 
+
+The BMI distribution skews right and has a single local maximum.
+
+
+
+
+Grouping pregnant mothers according to their BMI quartile.
+```{r}
+  cleanQuart <- CLEANP %>% mutate(BMIQuart = ntile(BMI, 4))
+  head(cleanQuart %>% arrange(BMIQuart))
+```
+
+
+```{r Metrics}
+    notSmoke <- cleanQuart %>% filter(smoke=="Non-Smoker") 
+    notSmoke %>% group_by(BMIQuart) %>% summarize(mean(bwt_gr))
+    notSmoke %>% group_by(BMIQuart) %>% summarize(sd(bwt_gr))
+    
+    notSmoke %>% group_by(BMIQuart) %>% summarize(median(bwt_gr))
+    notSmoke %>% group_by(BMIQuart) %>% summarize(IQR(bwt_gr))
+    
+    
+    didSmoke <- cleanQuart %>% filter(smoke=="Smoker")
+    didSmoke %>% group_by(BMIQuart) %>% summarize(mean(bwt_gr))
+    didSmoke %>% group_by(BMIQuart) %>% summarize(sd(bwt_gr))
+    
+    didSmoke %>% group_by(BMIQuart) %>% summarize(median(bwt_gr))
+    didSmoke %>% group_by(BMIQuart) %>% summarize(IQR(bwt_gr))
+```
+
+```{r plotting}
+
+    CLEANP <- CLEANP %>% mutate(BMIQuart = ntile(BMI, 4))
+
+  ggplot(data = CLEANP, aes(x =bwt_gr)) +
+   geom_density(color = "orange") +
+   facet_grid(smoke~BMIQuart) +
+    xlab("Weight in Grams")+
+   theme_bw()
+  
+  ggplot(data = CLEANP, aes(x =bwt_gr)) +
+   geom_histogram(fill = "lightblue") +
+   facet_grid(smoke~BMIQuart) +
+    xlab("Weight in Grams")+
+   theme_bw()
+
+```
+
+> **Results: Birth weights in each group appear to be relatively symmetric.**
+
+
+
+
+Creating boxplots of `bwt_gr` based on whether the mother smokes conditioned on `BMI` quartiles in order to determine Which one appears to be bigger factor, smoking or BMI?
+```{r smokingVBMI}
+  ggplot(data = CLEANP, aes(x=smoke, y= bwt_gr)) +
+   geom_boxplot(color = "purple") +
+   facet_grid(.~BMIQuart) +
+    ylab("Weight in Grams")+
+   theme_bw()
+
+```
+
+> **Results: Smoking appears to be a bigger factor on birth weight than BMI.**
+
+
+```{r, echo=FALSE}
+date()
+sessionInfo()
+R.Version()
+```
+
+
